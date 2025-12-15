@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>BuzzNet</title>
+<style>
+body { font-family: sans-serif; margin: 0; background: #f0f4f8; }
+header { background-color: #1b2430; color: white; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; }
+.logo { display: flex; align-items: center; }
+.logo img { width: 50px; height: 50px; margin-right: 10px; }
+.logo span { font-size: 28px; font-weight: bold; }
+.nav-buttons button { margin-left: 10px; padding: 5px 12px; cursor: pointer; background: #f0f4f8; color: #1b2430; border: none; border-radius: 6px; font-weight: bold; transition: 0.2s; }
+.nav-buttons button:hover { background: #d4e1f2; }
+
+.container { max-width: 700px; margin: 20px auto; padding: 0 10px; }
+
+.post { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 8px; background: #fff; opacity: 0; transform: translateY(20px); transition: all 0.3s ease; }
+.post.show { opacity: 1; transform: translateY(0); }
+input, textarea { width: 100%; padding: 8px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
+button.action { padding: 5px 10px; margin-top: 5px; cursor: pointer; border-radius: 5px; transition: 0.2s; }
+button.action.liked { background-color: #ff8080; color: white; }
+.comment { margin-left: 15px; font-size: 0.9em; color: #333; }
+.update { margin-left: 15px; font-size: 0.9em; color: #0077cc; transition: background 0.5s; }
+
+.modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; }
+.modal-content { background:#fff; padding:20px; border-radius:10px; width:300px; text-align:center; }
+.modal input { width: 90%; margin: 5px 0; }
+.modal button { width: 45%; margin: 5px 2%; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <img src="https://img.icons8.com/color/96/dinosaur.png" alt="Dino">
+    <span>BuzzNet</span>
+  </div>
+  <div class="nav-buttons">
+    <button onclick="openModal('login')">Войти</button>
+    <button onclick="openModal('register')">Регистрация</button>
+    <button onclick="logout()">Выйти</button>
+  </div>
+</header>
+
+<div class="container">
+  <div id="post-form" style="display:none;">
+    <h3>New Post</h3>
+    <input id="title" placeholder="Title">
+    <textarea id="content" placeholder="Content"></textarea>
+    <button class="action" onclick="addPost()">Post</button>
+  </div>
+
+  <h3>Posts</h3>
+  <div id="posts"></div>
+</div>
+
+<!-- Модальные окна -->
+<div class="modal" id="login-modal">
+  <div class="modal-content">
+    <h3>Войти</h3>
+    <input id="login-user" placeholder="Имя пользователя"><br>
+    <input id="login-pass" type="password" placeholder="Пароль"><br>
+    <button onclick="login()">Войти</button>
+    <button onclick="closeModal('login')">Отмена</button>
+  </div>
+</div>
+
+<div class="modal" id="register-modal">
+  <div class="modal-content">
+    <h3>Регистрация</h3>
+    <input id="register-user" placeholder="Имя пользователя"><br>
+    <input id="register-pass" type="password" placeholder="Пароль"><br>
+    <button onclick="register()">Зарегистрироваться</button>
+    <button onclick="closeModal('register')">Отмена</button>
+  </div>
+</div>
+
+<script>
+let posts = [];
+let users = [];
+let currentUser = null;
+
+// --- LocalStorage ---
+function savePosts() { localStorage.setItem('buzznet_posts', JSON.stringify(posts)); }
+function loadPosts() {
+  const data = localStorage.getItem('buzznet_posts');
+  if(data) posts = JSON.parse(data);
+}
+function saveUsers() { localStorage.setItem('buzznet_users', JSON.stringify(users)); }
+function loadUsers() {
+  const data = localStorage.getItem('buzznet_users');
+  if(data) users = JSON.parse(data);
+}
+function saveSession() { localStorage.setItem('buzznet_session', JSON.stringify(currentUser)); }
+function loadSession() {
+  const data = localStorage.getItem('buzznet_session');
+  if(data) currentUser = JSON.parse(data);
+}
+
+loadPosts();
+loadUsers();
+loadSession();
+if(currentUser) document.getElementById('post-form').style.display='block';
+
+// --- Модальные окна ---
+function openModal(type){ document.getElementById(type+'-modal').style.display='flex'; }
+function closeModal(type){ document.getElementById(type+'-modal').style.display='none'; }
+
+function logout(){
+  currentUser = null;
+  localStorage.removeItem('buzznet_session');
+  document.getElementById('post-form').style.display='none';
+  renderPosts();
+}
+
+// --- Регистрация и вход ---
+function register(){
+  const name = document.getElementById('register-user').value.trim();
+  const pass = document.getElementById('register-pass').value.trim();
+  if(!name || !pass) return alert('Введите имя и пароль');
+  if(users.find(u=>u.name===name)) return alert('Пользователь с таким именем уже существует');
+  users.push({name, pass});
+  saveUsers();
+  currentUser = name;
+  saveSession();
+  document.getElementById('post-form').style.display='block';
+  closeModal('register');
+  renderPosts();
+}
+
+function login(){
+  const name = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value.trim();
+  if(!name || !pass) return alert('Введите имя и пароль');
+  const user = users.find(u=>u.name===name && u.pass===pass);
+  if(!user) return alert('Неверное имя пользователя или пароль');
+  currentUser = name;
+  saveSession();
+  document.getElementById('post-form').style.display='block';
+  closeModal('login');
+  renderPosts();
+}
+
+// --- Посты ---
+function addPost(){
+  const title = document.getElementById('title').value.trim();
+  const content = document.getElementById('content').value.trim();
+  if(!title || !content || !currentUser) return alert('Заполните все поля и войдите в систему');
+
+  const post = {
+    id: Date.now(),
+    author: currentUser,
+    title,
+    content,
+    upvotes:0,
+    likedBy:[],
+    comments:[],
+    updates:[]
+  };
+  posts.unshift(post);
+  savePosts();
+  document.getElementById('title').value='';
+  document.getElementById('content').value='';
+  renderPosts();
+}
+
+function addComment(id){
+  const input = document.getElementById('comment-'+id);
+  const text = input.value.trim();
+  if(!text || !currentUser) return alert('Введите комментарий');
+  const post = posts.find(p=>p.id===id);
+  post.comments.push({text, author:currentUser});
+  savePosts();
+  input.value='';
+  renderPosts();
+}
+
+function addUpdate(id){
+  const input = document.getElementById('update-'+id);
+  const text = input.value.trim();
+  if(!text || !currentUser) return alert('Введите обновление');
+  const post = posts.find(p=>p.id===id);
+  post.updates.push({text, author:currentUser, time: Date.now()});
+  savePosts();
+  input.value='';
+  renderPosts();
+}
+
+function upvote(id){
+  const post = posts.find(p=>p.id===id);
+  if(!currentUser) return alert('Войдите для лайка');
+  if(!post.likedBy) post.likedBy = [];
+  if(post.likedBy.includes(currentUser)) return alert('Вы уже лайкнули этот пост');
+  post.upvotes++;
+  post.likedBy.push(currentUser);
+  savePosts();
+  renderPosts();
+}
+
+// --- Отрисовка ---
+function renderPosts(){
+  const container = document.getElementById('posts');
+  container.innerHTML='';
+  posts.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className='post';
+    div.innerHTML = `
+      <strong>${p.title}</strong> by <em>${p.author}</em><br>
+      <p>${p.content}</p>
+      <button class="action ${currentUser && p.likedBy.includes(currentUser)?'liked':''}" onclick="upvote(${p.id})">👍 ${p.upvotes}</button>
+
+      <h4>Updates</h4>
+      ${p.updates.map(u=>`<div class="update" style="background:#d4f0ff;padding:2px 4px;margin:2px 0;border-radius:3px"><b>${u.author}:</b> ${u.text}</div>`).join('')}
+      <input id="update-${p.id}" placeholder="Add update">
+      <button class="action" onclick="addUpdate(${p.id})">Add Update</button>
+
+      <h4>Comments</h4>
+      ${p.comments.map(c=>`<div class="comment"><b>${c.author}:</b> ${c.text}</div>`).join('')}
+      <input id="comment-${p.id}" placeholder="Add comment">
+      <button class="action" onclick="addComment(${p.id})">Add Comment</button>
+    `;
+    container.appendChild(div);
+    setTimeout(()=>{div.classList.add('show');}, i*100);
+  });
+}
+
+renderPosts();
+</script>
+
+</body>
+</html>
